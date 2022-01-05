@@ -51,18 +51,19 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
+type connectMsg struct {
+	sess ssh.Session
+	name string
+	addr string
+}
+
 func connectCmd(sess ssh.Session, name, addr string) tea.Cmd {
 	return func() tea.Msg {
-		log.Println("connecting to", addr)
-		if err := connect(sess, addr); err != nil {
-			fmt.Fprintln(sess, err.Error())
-			sess.Exit(1)
-			return nil // unreachable
+		return connectMsg{
+			sess: sess,
+			name: name,
+			addr: addr,
 		}
-		log.Printf("finished connection to %q (%s)", name, addr)
-		fmt.Fprintf(sess, "Closed connection to %q (%s)\n", name, addr)
-		sess.Exit(0)
-		return nil // unreachable
 	}
 }
 
@@ -93,6 +94,25 @@ func toAddress(listen string, port int64) string {
 
 type noopModel struct{}
 
-func (noopModel) Init() tea.Cmd                             { return nil }
-func (m noopModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) { log.Println("msg", msg); return m, nil }
-func (noopModel) View() string                              { return "" }
+func (noopModel) Init() tea.Cmd { return nil }
+func (m noopModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case connectMsg:
+		addr := msg.addr
+		sess := msg.sess
+		name := msg.name
+		log.Println("connecting to", addr)
+		if err := connect(sess, addr); err != nil {
+			fmt.Fprintln(sess, err.Error())
+			sess.Exit(1)
+			return m, nil
+		}
+		log.Printf("finished connection to %q (%s)", name, addr)
+		fmt.Fprintf(sess, "Closed connection to %q (%s)\n", name, addr)
+		sess.Exit(0)
+		return m, nil
+	}
+	log.Println("noop msg:", msg)
+	return m, nil
+}
+func (noopModel) View() string { return "" }
